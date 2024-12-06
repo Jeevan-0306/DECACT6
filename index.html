@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CT Scan Images</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        label {
+            font-size: 14px;
+            color: #555;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+
+        select {
+            width: 200px;
+            height: 300px;
+        }
+
+        .visualization {
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #fff;
+        }
+
+        svg {
+            width: 400px;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+<h1>CT Scan Images</h1>
+<div class="container">
+    <div class="controls">
+        <label for="binSlider">Bin Count</label>
+        <input type="range" id="binSlider" min="2" max="50" value="10" step="1">
+
+        <label for="minThreshold">Min Threshold</label>
+        <input type="range" id="minThreshold" min="0" max="1000" value="0">
+
+        <label for="maxThreshold">Max Threshold</label>
+        <input type="range" id="maxThreshold" min="0" max="1000" value="1000">
+
+        <select id="fileDropdown" size="20"></select>
+    </div>
+    <div class="visualization">
+        <svg></svg>
+    </div>
+</div>
+
+<script>
+    const svg = d3.select("svg");
+    const path = d3.geoPath();
+
+    // Initial Values
+    let binCount = +document.getElementById("binSlider").value;
+    let minThreshold = +document.getElementById("minThreshold").value;
+    let maxThreshold = +document.getElementById("maxThreshold").value;
+
+    function updateVisualization(selectedFile) {
+        d3.json(`dicomData/${selectedFile}`).then(data => {
+            svg.selectAll("*").remove(); // Clear the SVG
+
+            const gridSize = 256;
+            const values = data.flatMap(d => d.map(Number));
+
+            const dataMin = d3.min(values);
+            const dataMax = d3.max(values);
+
+            // Update slider limits based on the dataset
+            document.getElementById("minThreshold").min = dataMin;
+            document.getElementById("minThreshold").max = dataMax;
+            document.getElementById("maxThreshold").min = dataMin;
+            document.getElementById("maxThreshold").max = dataMax;
+
+            const colorScale = d3.scaleSequential(d3.interpolateCool)
+                .domain([minThreshold, maxThreshold]);
+
+            const thresholds = d3.range(minThreshold, maxThreshold, (maxThreshold - minThreshold) / binCount);
+
+            const contours = d3.contours()
+                .size([gridSize, gridSize])
+                .thresholds(thresholds)
+                (values);
+
+            svg.selectAll("path")
+                .data(contours)
+                .enter()
+                .append("path")
+                .attr("d", path)
+                .attr("fill", d => colorScale(d.value))
+                .attr("stroke", "#000")
+                .attr("stroke-width", 0.2);
+        });
+    }
+
+    function populateFileDropdown() {
+        const fileList = Array.from({ length: 20 }, (_, i) => `brain_${String(i + 1).padStart(3, '0')}.dcm.json`);
+        const dropdown = d3.select("#fileDropdown");
+
+        dropdown.selectAll("option")
+            .data(fileList)
+            .enter()
+            .append("option")
+            .text(d => d);
+
+        dropdown.on("change", () => {
+            const selectedFile = dropdown.property("value");
+            updateVisualization(selectedFile);
+        });
+    }
+
+    document.addEventListener("input", () => {
+        binCount = +document.getElementById("binSlider").value;
+        minThreshold = +document.getElementById("minThreshold").value;
+        maxThreshold = +document.getElementById("maxThreshold").value;
+
+        const selectedFile = d3.select("#fileDropdown").property("value");
+        if (selectedFile) updateVisualization(selectedFile);
+    });
+
+    // Initialize
+    populateFileDropdown();
+    updateVisualization("brain_001.dcm.json");
+</script>
+</body>
+</html>
